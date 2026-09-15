@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AnimatePresence,
   motion,
   useMotionValue,
   useMotionValueEvent,
+  useReducedMotion,
   useSpring,
 } from "motion/react";
-import { RATE_FEE, formatIDR, formatNumber } from "@/lib/rate";
+import {
+  RATE_FEE,
+  caretAfterFormat,
+  formatAmountInput,
+  formatIDR,
+  formatNumber,
+  parseLocalizedAmount,
+} from "@/lib/rate";
 
 type Direction = "USD_TO_IDR" | "IDR_TO_USD";
 
@@ -27,25 +35,53 @@ const QUICK_AMOUNTS = [10, 50, 100, 500, 1000];
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-function useAnimatedNumber(target: number) {
-  const mv = useMotionValue(target);
-  const spring = useSpring(mv, { stiffness: 110, damping: 22 });
-  const [display, setDisplay] = useState(target);
+/** Angka animasi terisolasi: tick spring hanya render komponen ini, input tidak ikut. */
+const AnimatedIDR = memo(function AnimatedIDR({ value }: { value: number }) {
+  const reduce = useReducedMotion();
+  const mv = useMotionValue(value);
+  const spring = useSpring(mv, { stiffness: 170, damping: 26 });
+  const [display, setDisplay] = useState(value);
 
   useMotionValueEvent(spring, "change", (v) => setDisplay(v));
 
   useEffect(() => {
-    mv.set(target);
-  }, [target, mv]);
+    if (reduce) {
+      mv.jump(value);
+      setDisplay(value);
+    } else {
+      mv.set(value);
+    }
+  }, [value, mv, reduce]);
 
-  return display;
-}
+  return <>{formatIDR(display)}</>;
+});
+
+const AnimatedUSD = memo(function AnimatedUSD({ value }: { value: number }) {
+  const reduce = useReducedMotion();
+  const mv = useMotionValue(value);
+  const spring = useSpring(mv, { stiffness: 170, damping: 26 });
+  const [display, setDisplay] = useState(value);
+
+  useMotionValueEvent(spring, "change", (v) => setDisplay(v));
+
+  useEffect(() => {
+    if (reduce) {
+      mv.jump(value);
+      setDisplay(value);
+    } else {
+      mv.set(value);
+    }
+  }, [value, mv, reduce]);
+
+  return <>${formatNumber(display)}</>;
+});
 
 export default function Converter() {
   const [rate, setRate] = useState<ApiRate | null>(null);
   const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState("100");
   const [direction, setDirection] = useState<Direction>("USD_TO_IDR");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const loadRate = useCallback(async () => {
     setLoading(true);
@@ -73,10 +109,23 @@ export default function Converter() {
     loadRate();
   }, [loadRate]);
 
-  const numericAmount = useMemo(() => {
-    const parsed = parseFloat(amount.replace(/[^0-9.]/g, ""));
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-  }, [amount]);
+  const handleAmountChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const el = e.target;
+      const raw = el.value;
+      const caret = el.selectionStart ?? raw.length;
+      const sigCount = (raw.slice(0, caret).match(/[0-9.,]/g) || []).length;
+      const formatted = formatAmountInput(raw);
+      setAmount(formatted);
+      const pos = caretAfterFormat(formatted, sigCount);
+      requestAnimationFrame(() => {
+        inputRef.current?.setSelectionRange(pos, pos);
+      });
+    },
+    []
+  );
+
+  const numericAmount = useMemo(() => parseLocalizedAmount(amount), [amount]);
 
   const result = useMemo(() => {
     if (!rate) return { converted: 0, totalFee: 0, marketValue: 0 };
@@ -95,9 +144,6 @@ export default function Converter() {
     };
   }, [rate, numericAmount, direction]);
 
-  const animatedConverted = useAnimatedNumber(result.converted);
-  const animatedMarket = useAnimatedNumber(result.marketValue);
-
   const isUsdToIdr = direction === "USD_TO_IDR";
   const updatedLabel = rate
     ? new Date(rate.updatedAt).toLocaleTimeString("id-ID", {
@@ -105,13 +151,6 @@ export default function Converter() {
         minute: "2-digit",
       })
     : "--:--";
-
-  const resultText =
-    loading && !rate
-      ? "Menghitung..."
-      : isUsdToIdr
-        ? formatIDR(animatedConverted)
-        : `$${formatNumber(animatedConverted)}`;
 
   return (
     <div className="w-full max-w-xl">
@@ -220,9 +259,12 @@ export default function Converter() {
               </motion.span>
             </AnimatePresence>
             <input
+              ref={inputRef}
               inputMode="decimal"
+              autoComplete="off"
+              spellCheck={false}
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={handleAmountChange}
               placeholder="0"
               className="tabular w-full bg-transparent text-2xl font-bold text-slate-800 outline-none placeholder:text-slate-300"
             />
@@ -250,7 +292,9 @@ export default function Converter() {
                       transition={{ duration: 0.3, delay: i * 0.04, ease: EASE }}
                       whileTap={{ scale: 0.92 }}
                       whileHover={{ scale: 1.05 }}
-                      onClick={() => setAmount(String(value))}
+                      onClick={() =>
+                        setAmount(formatAmountInput(String(value)))
+                      }
                       className="rounded-full border border-paypal-mist bg-white px-3 py-1 text-xs font-semibold text-paypal-blue transition-colors duration-300 hover:border-paypal-blue hover:bg-paypal-smoke"
                     >
                       ${value}
@@ -289,7 +333,13 @@ export default function Converter() {
                 transition={{ duration: 0.25, ease: EASE }}
                 className="tabular mt-1 break-words text-3xl font-extrabold sm:text-4xl"
               >
-                {resultText}
+                {loading && !rate ? (
+                  "Menghitung..."
+                ) : isUsdToIdr ? (
+                  <AnimatedIDR value={result.converted} />
+                ) : (
+                  <AnimatedUSD value={result.converted} />
+                )}
               </motion.p>
             </AnimatePresence>
             <p className="tabular mt-2 text-xs text-white/80">
@@ -353,23 +403,25 @@ export default function Converter() {
               <div className="flex items-center justify-between px-4 py-3">
                 <dt className="text-slate-500">Nilai di rate pasar</dt>
                 <dd className="tabular font-semibold text-slate-800">
-                  {isUsdToIdr
-                    ? formatIDR(animatedMarket)
-                    : `$${formatNumber(
-                        rate && rate.marketRate > 0
-                          ? (rate.effectiveRate > 0
-                              ? numericAmount / rate.effectiveRate
-                              : 0) * rate.marketRate
-                          : 0
-                      )}`}
+                  {isUsdToIdr ? (
+                    <AnimatedIDR value={result.marketValue} />
+                  ) : (
+                    <AnimatedUSD value={result.marketValue} />
+                  )}
                 </dd>
               </div>
               <div className="flex items-center justify-between px-4 py-3">
                 <dt className="text-slate-500">Total potongan</dt>
                 <dd className="tabular font-semibold text-rose-600">
-                  {isUsdToIdr
-                    ? `-${formatIDR(result.totalFee)}`
-                    : `-$${formatNumber(result.totalFee)}`}
+                  {isUsdToIdr ? (
+                    <>
+                      -<AnimatedIDR value={result.totalFee} />
+                    </>
+                  ) : (
+                    <>
+                      -<AnimatedUSD value={result.totalFee} />
+                    </>
+                  )}
                 </dd>
               </div>
             </dl>
