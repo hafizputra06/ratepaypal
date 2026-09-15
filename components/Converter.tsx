@@ -1,6 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AnimatePresence,
+  motion,
+  useMotionValue,
+  useMotionValueEvent,
+  useSpring,
+} from "motion/react";
 import { RATE_FEE, formatIDR, formatNumber } from "@/lib/rate";
 
 type Direction = "USD_TO_IDR" | "IDR_TO_USD";
@@ -17,6 +24,22 @@ interface ApiRate {
 }
 
 const QUICK_AMOUNTS = [10, 50, 100, 500, 1000];
+
+const EASE = [0.22, 1, 0.36, 1] as const;
+
+function useAnimatedNumber(target: number) {
+  const mv = useMotionValue(target);
+  const spring = useSpring(mv, { stiffness: 110, damping: 22 });
+  const [display, setDisplay] = useState(target);
+
+  useMotionValueEvent(spring, "change", (v) => setDisplay(v));
+
+  useEffect(() => {
+    mv.set(target);
+  }, [target, mv]);
+
+  return display;
+}
 
 export default function Converter() {
   const [rate, setRate] = useState<ApiRate | null>(null);
@@ -72,6 +95,9 @@ export default function Converter() {
     };
   }, [rate, numericAmount, direction]);
 
+  const animatedConverted = useAnimatedNumber(result.converted);
+  const animatedMarket = useAnimatedNumber(result.marketValue);
+
   const isUsdToIdr = direction === "USD_TO_IDR";
   const updatedLabel = rate
     ? new Date(rate.updatedAt).toLocaleTimeString("id-ID", {
@@ -80,9 +106,20 @@ export default function Converter() {
       })
     : "--:--";
 
+  const resultText =
+    loading && !rate
+      ? "Menghitung..."
+      : isUsdToIdr
+        ? formatIDR(animatedConverted)
+        : `$${formatNumber(animatedConverted)}`;
+
   return (
     <div className="w-full max-w-xl">
-      <div className="overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-paypal-mist">
+      <motion.div
+        layout
+        transition={{ duration: 0.4, ease: EASE }}
+        className="overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-paypal-mist transition-shadow duration-500 hover:shadow-lift"
+      >
         <div className="flex items-center justify-between bg-gradient-to-r from-paypal-navy to-paypal-dark px-5 py-4 sm:px-7 sm:py-5">
           <div className="flex items-center gap-2">
             <span className="text-lg font-extrabold italic tracking-tight">
@@ -94,97 +131,196 @@ export default function Converter() {
               Rate Converter
             </span>
           </div>
-          <button
+          <motion.button
             onClick={loadRate}
             disabled={loading}
-            className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-50"
+            whileTap={{ scale: 0.93 }}
+            whileHover={loading ? undefined : { scale: 1.04 }}
+            transition={{ duration: 0.2, ease: EASE }}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-300 hover:bg-white/20 disabled:opacity-50"
           >
+            <motion.span
+              animate={loading ? { rotate: 360 } : { rotate: 0 }}
+              transition={
+                loading
+                  ? { duration: 0.9, repeat: Infinity, ease: "linear" }
+                  : { duration: 0.3 }
+              }
+              className="inline-block"
+            >
+              ↻
+            </motion.span>
             {loading ? "Memuat..." : "Refresh"}
-          </button>
+          </motion.button>
         </div>
 
         <div className="p-5 sm:p-7">
-          <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl bg-paypal-smoke p-1.5">
-            <button
-              onClick={() => setDirection("USD_TO_IDR")}
-              className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                isUsdToIdr
-                  ? "bg-white text-paypal-navy shadow-sm"
-                  : "text-slate-500 hover:text-paypal-blue"
-              }`}
-            >
-              USD ke IDR
-            </button>
-            <button
-              onClick={() => setDirection("IDR_TO_USD")}
-              className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                !isUsdToIdr
-                  ? "bg-white text-paypal-navy shadow-sm"
-                  : "text-slate-500 hover:text-paypal-blue"
-              }`}
-            >
-              IDR ke USD
-            </button>
+          <div className="relative mb-5 grid grid-cols-2 gap-2 rounded-2xl bg-paypal-smoke p-1.5">
+            {(
+              [
+                { id: "USD_TO_IDR", label: "USD ke IDR" },
+                { id: "IDR_TO_USD", label: "IDR ke USD" },
+              ] as const
+            ).map((tab) => {
+              const active = direction === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setDirection(tab.id)}
+                  className={`relative rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors duration-300 ${
+                    active
+                      ? "text-paypal-navy"
+                      : "text-slate-500 hover:text-paypal-blue"
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="dir-pill"
+                      transition={{ duration: 0.35, ease: EASE }}
+                      className="absolute inset-0 rounded-xl bg-white shadow-sm"
+                    />
+                  )}
+                  <span className="relative">{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          <label className="mb-2 block text-sm font-semibold text-slate-600">
-            {isUsdToIdr ? "Jumlah dalam USD" : "Jumlah dalam IDR"}
-          </label>
-          <div className="flex items-center rounded-2xl border-2 border-paypal-mist bg-white px-4 py-3 transition focus-within:border-paypal-blue focus-within:ring-4 focus-within:ring-paypal-blue/10">
-            <span className="mr-3 select-none rounded-lg bg-paypal-smoke px-2.5 py-1 text-sm font-bold text-paypal-navy">
-              {isUsdToIdr ? "$" : "Rp"}
-            </span>
+          <div className="mb-2 flex items-center justify-between">
+            <label className="block text-sm font-semibold text-slate-600">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={direction}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.25, ease: EASE }}
+                  className="block"
+                >
+                  {isUsdToIdr ? "Jumlah dalam USD" : "Jumlah dalam IDR"}
+                </motion.span>
+              </AnimatePresence>
+            </label>
+          </div>
+          <motion.div
+            layout
+            transition={{ duration: 0.3, ease: EASE }}
+            className="flex items-center rounded-2xl border-2 border-paypal-mist bg-white px-4 py-3 transition-all duration-300 focus-within:-translate-y-0.5 focus-within:border-paypal-blue focus-within:shadow-lift focus-within:ring-4 focus-within:ring-paypal-blue/10"
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={isUsdToIdr ? "usd" : "idr"}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
+                className="mr-3 select-none rounded-lg bg-paypal-smoke px-2.5 py-1 text-sm font-bold text-paypal-navy"
+              >
+                {isUsdToIdr ? "$" : "Rp"}
+              </motion.span>
+            </AnimatePresence>
             <input
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0"
-              className="w-full bg-transparent text-2xl font-bold text-slate-800 outline-none placeholder:text-slate-300"
+              className="tabular w-full bg-transparent text-2xl font-bold text-slate-800 outline-none placeholder:text-slate-300"
             />
             <span className="ml-2 select-none text-sm font-semibold text-slate-400">
               {isUsdToIdr ? "USD" : "IDR"}
             </span>
-          </div>
+          </motion.div>
 
-          {isUsdToIdr && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {QUICK_AMOUNTS.map((value) => (
-                <button
-                  key={value}
-                  onClick={() => setAmount(String(value))}
-                  className="rounded-full border border-paypal-mist bg-white px-3 py-1 text-xs font-semibold text-paypal-blue transition hover:border-paypal-blue hover:bg-paypal-smoke"
-                >
-                  ${value}
-                </button>
-              ))}
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {isUsdToIdr && (
+              <motion.div
+                key="quick"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: EASE }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {QUICK_AMOUNTS.map((value, i) => (
+                    <motion.button
+                      key={value}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: i * 0.04, ease: EASE }}
+                      whileTap={{ scale: 0.92 }}
+                      whileHover={{ scale: 1.05 }}
+                      onClick={() => setAmount(String(value))}
+                      className="rounded-full border border-paypal-mist bg-white px-3 py-1 text-xs font-semibold text-paypal-blue transition-colors duration-300 hover:border-paypal-blue hover:bg-paypal-smoke"
+                    >
+                      ${value}
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <div className="mt-6 rounded-2xl bg-gradient-to-br from-paypal-blue to-paypal-sky p-5 text-white shadow-inner">
+          <motion.div
+            layout
+            transition={{ duration: 0.4, ease: EASE }}
+            className="relative mt-6 overflow-hidden rounded-2xl bg-gradient-to-br from-paypal-blue to-paypal-sky p-5 text-white shadow-inner"
+          >
+            <AnimatePresence>
+              {loading && (
+                <motion.div
+                  key="shimmer"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="shimmer-line pointer-events-none absolute inset-0"
+                />
+              )}
+            </AnimatePresence>
             <p className="text-xs font-semibold uppercase tracking-wider text-white/80">
               {isUsdToIdr ? "Anda menerima" : "Total dibutuhkan"}
             </p>
-            <p className="mt-1 break-words text-3xl font-extrabold sm:text-4xl">
-              {loading && !rate
-                ? "Menghitung..."
-                : isUsdToIdr
-                  ? formatIDR(result.converted)
-                  : `$${formatNumber(result.converted)}`}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.p
+                key={`${direction}-${loading && !rate}`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.25, ease: EASE }}
+                className="tabular mt-1 break-words text-3xl font-extrabold sm:text-4xl"
+              >
+                {resultText}
+              </motion.p>
+            </AnimatePresence>
+            <p className="tabular mt-2 text-xs text-white/80">
+              1 USD = {rate ? formatIDR(rate.effectiveRate) : "..."} (kurs
+              efektif)
             </p>
-            <p className="mt-2 text-xs text-white/80">
-              1 USD ={" "}
-              {rate ? formatIDR(rate.effectiveRate) : "..."} (kurs efektif)
-            </p>
-          </div>
+          </motion.div>
 
-          {rate?.fallback && (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-              {rate.error ??
-                "Kurs live tidak tersedia. Menampilkan kurs cadangan."}
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {rate?.fallback && (
+              <motion.div
+                key="fallback"
+                initial={{ opacity: 0, y: -8, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: "auto" }}
+                exit={{ opacity: 0, y: -8, height: 0 }}
+                transition={{ duration: 0.3, ease: EASE }}
+                className="overflow-hidden"
+              >
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                  {rate.error ??
+                    "Kurs live tidak tersedia. Menampilkan kurs cadangan."}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <div className="mt-6 rounded-2xl border border-paypal-mist">
+          <motion.div
+            layout
+            transition={{ duration: 0.35, ease: EASE }}
+            className="mt-6 rounded-2xl border border-paypal-mist"
+          >
             <div className="border-b border-paypal-mist px-4 py-3">
               <h2 className="text-sm font-bold text-paypal-navy">
                 Rincian Transparansi Kurs
@@ -193,7 +329,7 @@ export default function Converter() {
             <dl className="divide-y divide-paypal-mist text-sm">
               <div className="flex items-center justify-between px-4 py-3">
                 <dt className="text-slate-500">Rate pasar asli</dt>
-                <dd className="font-semibold text-slate-800">
+                <dd className="tabular font-semibold text-slate-800">
                   {rate ? formatIDR(rate.marketRate) : "..."}
                 </dd>
               </div>
@@ -204,41 +340,45 @@ export default function Converter() {
                     -Rp {rate ? rate.fee : RATE_FEE}
                   </span>
                 </dt>
-                <dd className="font-semibold text-rose-600">
+                <dd className="tabular font-semibold text-rose-600">
                   {rate ? `-${formatIDR(rate.fee)}` : "..."}
                 </dd>
               </div>
               <div className="flex items-center justify-between bg-paypal-smoke/60 px-4 py-3">
                 <dt className="font-semibold text-paypal-navy">Rate efektif</dt>
-                <dd className="font-bold text-paypal-navy">
+                <dd className="tabular font-bold text-paypal-navy">
                   {rate ? formatIDR(rate.effectiveRate) : "..."}
                 </dd>
               </div>
               <div className="flex items-center justify-between px-4 py-3">
-                <dt className="text-slate-500">
-                  {isUsdToIdr ? "Nilai di rate pasar" : "Nilai di rate pasar"}
-                </dt>
-                <dd className="font-semibold text-slate-800">
+                <dt className="text-slate-500">Nilai di rate pasar</dt>
+                <dd className="tabular font-semibold text-slate-800">
                   {isUsdToIdr
-                    ? formatIDR(result.marketValue)
-                    : `$${formatNumber(result.marketValue)}`}
+                    ? formatIDR(animatedMarket)
+                    : `$${formatNumber(
+                        rate && rate.marketRate > 0
+                          ? (rate.effectiveRate > 0
+                              ? numericAmount / rate.effectiveRate
+                              : 0) * rate.marketRate
+                          : 0
+                      )}`}
                 </dd>
               </div>
               <div className="flex items-center justify-between px-4 py-3">
                 <dt className="text-slate-500">Total potongan</dt>
-                <dd className="font-semibold text-rose-600">
+                <dd className="tabular font-semibold text-rose-600">
                   {isUsdToIdr
                     ? `-${formatIDR(result.totalFee)}`
                     : `-$${formatNumber(result.totalFee)}`}
                 </dd>
               </div>
             </dl>
-          </div>
+          </motion.div>
 
           <p className="mt-4 flex items-center justify-between text-[11px] text-slate-400">
             <span>
-              Sumber: {rate ? rate.source : "exchangerate.fun"} · diperbarui {updatedLabel} WIB · cache 1
-              jam
+              Sumber: {rate ? rate.source : "kurs pasar"} · diperbarui{" "}
+              {updatedLabel} WIB · cache 1 jam
             </span>
             <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
@@ -246,7 +386,7 @@ export default function Converter() {
             </span>
           </p>
         </div>
-      </div>
+      </motion.div>
 
       <p className="mt-5 text-center text-xs text-slate-400">
         Demo konverter dengan skema potongan rate Rp 600. Bukan produk resmi

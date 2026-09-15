@@ -80,7 +80,7 @@ export async function GET() {
       updatedAt: new Date().toISOString(),
       fallback: true,
       error:
-        "Gagal mengambil kurs dari exchangerate.fun. Menggunakan kurs cadangan.",
+        "Gagal mengambil kurs live. Menggunakan kurs cadangan.",
       detail: errors.join(" | "),
     },
     { status: 200 }
