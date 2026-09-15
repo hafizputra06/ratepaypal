@@ -2,6 +2,17 @@ export const RATE_FEE = 600;
 
 export const RATE_FETCH_URL = "https://api.exchangerate.fun/latest?base=USD";
 
+export interface RateProvider {
+  name: string;
+  url: string;
+}
+
+export const RATE_PROVIDERS: RateProvider[] = [
+  { name: "exchangerate.fun", url: "https://api.exchangerate.fun/latest?base=USD" },
+  { name: "open.er-api.com", url: "https://open.er-api.com/v6/latest/USD" },
+  { name: "frankfurter.app", url: "https://api.frankfurter.app/latest?from=USD&to=IDR" },
+];
+
 export const API_CACHE_REVALIDATE = 3600;
 
 export const FALLBACK_MARKET_RATE = 17650;

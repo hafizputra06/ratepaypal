@@ -237,7 +237,7 @@ export default function Converter() {
 
           <p className="mt-4 flex items-center justify-between text-[11px] text-slate-400">
             <span>
-              Sumber: exchangerate.fun · diperbarui {updatedLabel} WIB · cache 1
+              Sumber: {rate ? rate.source : "exchangerate.fun"} · diperbarui {updatedLabel} WIB · cache 1
               jam
             </span>
             <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
