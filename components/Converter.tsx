@@ -17,6 +17,7 @@ import {
   formatNumber,
   parseLocalizedAmount,
 } from "@/lib/rate";
+import LogoMark from "./Logo";
 
 type Direction = "USD_TO_IDR" | "IDR_TO_USD";
 
@@ -161,6 +162,7 @@ export default function Converter() {
       >
         <div className="flex items-center justify-between bg-gradient-to-r from-paypal-navy to-paypal-dark px-5 py-4 sm:px-7 sm:py-5">
           <div className="flex items-center gap-2">
+            <LogoMark size={30} className="shrink-0 rounded-lg shadow-sm" />
             <span className="text-lg font-extrabold italic tracking-tight">
               <span className="text-white">Pay</span>
               <span className="text-paypal-sky">Pal</span>
