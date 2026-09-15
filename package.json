@@ -2,6 +2,9 @@
   "name": "ratepaypal",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -14,6 +17,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.13",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

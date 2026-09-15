@@ -6,6 +6,7 @@ import {
 } from "@/lib/rate";
 
 export const revalidate = 3600;
+export const runtime = "nodejs";
 
 interface ExchangeRateResponse {
   base?: string;
@@ -15,7 +16,7 @@ interface ExchangeRateResponse {
 export async function GET() {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
     const res = await fetch(RATE_FETCH_URL, {
       signal: controller.signal,
@@ -45,7 +46,8 @@ export async function GET() {
       source: data.base ?? "USD",
       updatedAt: new Date().toISOString(),
     });
-  } catch {
+  } catch (err) {
+    console.error("[api/rate] fetch exchangerate.fun failed:", err);
     return NextResponse.json(
       {
         ok: false,
